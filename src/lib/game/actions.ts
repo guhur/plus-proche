@@ -1,6 +1,7 @@
 import { v4 as uuidv4 } from "uuid";
 import * as Y from "yjs";
-import type { GamePhase, Question } from "@/lib/yjs/types";
+import type { Question } from "@/lib/yjs/types";
+import { GamePhase } from "@/lib/yjs/types";
 import { generatePin } from "./pin";
 
 export function createGame(
@@ -13,7 +14,7 @@ export function createGame(
   ydoc.transact(() => {
     const gameState = ydoc.getMap("gameState");
     gameState.set("pin", pin);
-    gameState.set("phase", "waiting");
+    gameState.set("phase", GamePhase.Waiting);
     gameState.set("hostId", playerId);
     gameState.set("theme", null);
     gameState.set("difficulty", null);
@@ -62,7 +63,7 @@ export function setQuestion(ydoc: Y.Doc, question: Question): void {
   ydoc.transact(() => {
     gameState.set("currentQuestion", question);
     gameState.set("roundNumber", (gameState.get("roundNumber") as number) + 1);
-    gameState.set("phase", "question");
+    gameState.set("phase", GamePhase.Question);
 
     const answers = ydoc.getMap("answers");
     answers.forEach((_, key) => {

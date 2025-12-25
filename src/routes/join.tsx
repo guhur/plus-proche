@@ -9,7 +9,6 @@ import {
 } from "@chakra-ui/react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
-import { v4 as uuidv4 } from "uuid";
 import { UI_TEXTS } from "@/lib/game/constants";
 import { isValidPin } from "@/lib/game/pin";
 
@@ -22,17 +21,13 @@ function JoinPage() {
   const [pin, setPin] = useState("");
   const [error, setError] = useState("");
 
-  const playerName = sessionStorage.getItem("playerName") ?? "";
+  const playerName = localStorage.getItem("lastPlayerName") ?? "";
 
   const handleJoin = () => {
     if (!isValidPin(pin)) {
       setError("Le code PIN doit contenir 4 chiffres");
       return;
     }
-
-    const playerId = uuidv4();
-    sessionStorage.setItem("playerId", playerId);
-    sessionStorage.setItem("isHost", "false");
 
     navigate({ to: "/game/$pin", params: { pin } });
   };

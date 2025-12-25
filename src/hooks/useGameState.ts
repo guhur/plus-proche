@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import type * as Y from "yjs";
-import type { Difficulty, GamePhase, GameState } from "@/lib/yjs/types";
+import type { Difficulty, GameState } from "@/lib/yjs/types";
+import { GamePhase } from "@/lib/yjs/types";
 
 const defaultGameState: GameState = {
   pin: "",
-  phase: "waiting",
+  phase: GamePhase.Waiting,
   hostId: "",
   theme: null,
   difficulty: null,

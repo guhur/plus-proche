@@ -1,5 +1,15 @@
-import { Badge, Box, Container, Spinner, Text, VStack } from "@chakra-ui/react";
-import { createFileRoute } from "@tanstack/react-router";
+import {
+  Badge,
+  Box,
+  Container,
+  HStack,
+  IconButton,
+  Spinner,
+  Text,
+  VStack,
+} from "@chakra-ui/react";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { Home, Share2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { v4 as uuidv4 } from "uuid";
 import { AnswerInput } from "@/components/game/AnswerInput";
@@ -9,6 +19,7 @@ import { ResultsDisplay } from "@/components/game/ResultsDisplay";
 import { Scoreboard } from "@/components/game/Scoreboard";
 import { WaitingRoom } from "@/components/game/WaitingRoom";
 import { useAnswers } from "@/hooks/useAnswers";
+import { useGameSession } from "@/hooks/useGameSession";
 import { useGameState } from "@/hooks/useGameState";
 import { usePlayers } from "@/hooks/usePlayers";
 import { useYjsProvider } from "@/hooks/useYjsProvider";
@@ -21,6 +32,7 @@ import {
 } from "@/lib/game/actions";
 import { calculateRoundResults } from "@/lib/game/scoring";
 import type { Difficulty, Question } from "@/lib/yjs/types";
+import { GamePhase } from "@/lib/yjs/types";
 
 export const Route = createFileRoute("/game/$pin")({
   component: GamePage,
@@ -28,72 +40,74 @@ export const Route = createFileRoute("/game/$pin")({
 
 function GamePage() {
   const { pin } = Route.useParams();
+  const navigate = useNavigate();
   const { ydoc, isConnected, isSynced, connectedPeers } = useYjsProvider(pin);
   const { gameState } = useGameState(ydoc);
   const { players, updateScore } = usePlayers(ydoc);
   const { answers, submitAnswer, clearAnswers, hasAnswered } = useAnswers(ydoc);
+  const { getSession, saveSession, getPlayerName } = useGameSession(pin);
 
   const [playerId, setPlayerId] = useState<string | null>(null);
+  const [isHost, setIsHost] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [winnerIds, setWinnerIds] = useState<string[]>([]);
   const [loserId, setLoserId] = useState<string>("");
   const hasInitialized = useRef(false);
 
-  const isHost = sessionStorage.getItem("isHost") === "true";
-  const playerName = sessionStorage.getItem("playerName") ?? "Joueur";
+  const playerName = getPlayerName() ?? "Joueur";
 
   // Initialize player on first connect
   useEffect(() => {
     if (!ydoc || !isSynced || hasInitialized.current) return;
 
-    const existingPlayerId = sessionStorage.getItem("playerId");
+    const savedSession = getSession();
+    const playersMap = ydoc.getMap("players");
+    const gameStateMap = ydoc.getMap("gameState");
+    const existingPin = gameStateMap.get("pin");
 
-    // Host creates the game
-    if (isHost) {
-      // Check if game already exists (e.g., page refresh)
-      const gameStateMap = ydoc.getMap("gameState");
-      const existingPin = gameStateMap.get("pin");
+    // Try to reconnect with saved session
+    if (savedSession && playersMap.has(savedSession.playerId)) {
+      setPlayerId(savedSession.playerId);
+      setIsHost(savedSession.isHost);
+      hasInitialized.current = true;
+      return;
+    }
 
-      if (!existingPin) {
-        // Create new game
-        const result = createGame(ydoc, playerName);
-        setPlayerId(result.playerId);
-        sessionStorage.setItem("playerId", result.playerId);
-        hasInitialized.current = true;
-      } else if (existingPlayerId) {
-        // Rejoin existing game
-        const playersMap = ydoc.getMap("players");
-        if (playersMap.has(existingPlayerId)) {
-          setPlayerId(existingPlayerId);
-        } else {
-          // Player was removed, rejoin
-          const newId = joinGame(ydoc, playerName);
-          setPlayerId(newId);
-          sessionStorage.setItem("playerId", newId);
-        }
-        hasInitialized.current = true;
-      }
+    // Check if we're supposed to be the host (coming from home page)
+    const isCreatingGame = sessionStorage.getItem("isHost") === "true";
+    sessionStorage.removeItem("isHost"); // Clear after reading
+
+    if (isCreatingGame && !existingPin) {
+      // Create new game as host
+      const result = createGame(ydoc, playerName);
+      setPlayerId(result.playerId);
+      setIsHost(true);
+      saveSession({
+        playerId: result.playerId,
+        playerName,
+        isHost: true,
+        joinedAt: Date.now(),
+      });
+      hasInitialized.current = true;
     } else {
-      // Non-host joins the game
-      const playersMap = ydoc.getMap("players");
-
-      if (existingPlayerId && playersMap.has(existingPlayerId)) {
-        // Already in game
-        setPlayerId(existingPlayerId);
-      } else {
-        // Join as new player
-        const newId = joinGame(ydoc, playerName);
-        setPlayerId(newId);
-        sessionStorage.setItem("playerId", newId);
-      }
+      // Join existing game as player
+      const newId = joinGame(ydoc, playerName);
+      setPlayerId(newId);
+      setIsHost(false);
+      saveSession({
+        playerId: newId,
+        playerName,
+        isHost: false,
+        joinedAt: Date.now(),
+      });
       hasInitialized.current = true;
     }
-  }, [ydoc, isSynced, isHost, playerName]);
+  }, [ydoc, isSynced, playerName, getSession, saveSession]);
 
   // Check if all players answered
   useEffect(() => {
     if (
-      gameState.phase === "question" &&
+      gameState.phase === GamePhase.Question &&
       answers.length === players.length &&
       players.length > 0 &&
       gameState.currentQuestion
@@ -112,7 +126,7 @@ function GamePage() {
         result.winnerIds.forEach((id) => {
           updateScore(id, 1);
         });
-        setPhase(ydoc, "results");
+        setPhase(ydoc, GamePhase.Results);
         ydoc.getMap("gameState").set("nextPickerId", result.loserId);
       }
     }
@@ -127,7 +141,7 @@ function GamePage() {
 
   const handleStartGame = useCallback(() => {
     if (!ydoc) return;
-    setPhase(ydoc, "settings");
+    setPhase(ydoc, GamePhase.Settings);
   }, [ydoc]);
 
   const handleConfirmSettings = useCallback(
@@ -168,8 +182,25 @@ function GamePage() {
   const handleNextRound = useCallback(() => {
     if (!ydoc) return;
     clearAnswers();
-    setPhase(ydoc, "settings");
+    setPhase(ydoc, GamePhase.Settings);
   }, [ydoc, clearAnswers]);
+
+  const handleShare = useCallback(async () => {
+    const url = window.location.href;
+    if (navigator.share) {
+      await navigator.share({
+        title: "Plus Proche",
+        text: `Rejoins ma partie ! Code : ${pin}`,
+        url,
+      });
+    } else {
+      await navigator.clipboard.writeText(url);
+    }
+  }, [pin]);
+
+  const handleGoHome = useCallback(() => {
+    navigate({ to: "/" });
+  }, [navigate]);
 
   // Loading state with connection info
   if (!isSynced) {
@@ -201,14 +232,30 @@ function GamePage() {
   return (
     <Box minH="100vh" bg="gray.50" py={8}>
       <Container maxW="lg">
-        {/* Connection status */}
-        <Box position="fixed" top={4} right={4}>
+        {/* Header with navigation and status */}
+        <HStack justify="space-between" mb={6}>
+          <IconButton
+            aria-label="Retour à l'accueil"
+            variant="ghost"
+            size="sm"
+            onClick={handleGoHome}
+          >
+            <Home size={20} />
+          </IconButton>
           <Badge colorPalette={isConnected ? "green" : "red"} size="sm">
             {connectedPeers} en ligne
           </Badge>
-        </Box>
+          <IconButton
+            aria-label="Partager la partie"
+            variant="ghost"
+            size="sm"
+            onClick={handleShare}
+          >
+            <Share2 size={20} />
+          </IconButton>
+        </HStack>
 
-        {gameState.phase === "waiting" && (
+        {gameState.phase === GamePhase.Waiting && (
           <WaitingRoom
             pin={pin}
             players={players}
@@ -217,14 +264,25 @@ function GamePage() {
           />
         )}
 
-        {gameState.phase === "settings" && canPickNextRound && (
-          <GameSettings
-            onConfirm={handleConfirmSettings}
-            nextPickerName={nextPicker?.name}
-          />
-        )}
+        {gameState.phase === GamePhase.Settings &&
+          canPickNextRound &&
+          !isLoading && (
+            <GameSettings
+              onConfirm={handleConfirmSettings}
+              nextPickerName={nextPicker?.name}
+            />
+          )}
 
-        {gameState.phase === "settings" && !canPickNextRound && (
+        {gameState.phase === GamePhase.Settings &&
+          canPickNextRound &&
+          isLoading && (
+            <VStack gap={4} py={8}>
+              <Spinner size="xl" color="blue.500" />
+              <Text color="gray.600">Génération de la question...</Text>
+            </VStack>
+          )}
+
+        {gameState.phase === GamePhase.Settings && !canPickNextRound && (
           <VStack gap={4} py={8}>
             <Spinner size="lg" color="blue.500" />
             <Text color="gray.600">
@@ -233,7 +291,7 @@ function GamePage() {
           </VStack>
         )}
 
-        {gameState.phase === "question" && (
+        {gameState.phase === GamePhase.Question && (
           <VStack gap={8}>
             <QuestionDisplay
               question={gameState.currentQuestion}
@@ -251,7 +309,7 @@ function GamePage() {
           </VStack>
         )}
 
-        {gameState.phase === "results" && gameState.currentQuestion && (
+        {gameState.phase === GamePhase.Results && gameState.currentQuestion && (
           <ResultsDisplay
             correctAnswer={gameState.currentQuestion.correctAnswer}
             answers={answers}

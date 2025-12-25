@@ -8,8 +8,7 @@ import {
   VStack,
 } from "@chakra-ui/react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
-import { v4 as uuidv4 } from "uuid";
+import { useEffect, useState } from "react";
 import { UI_TEXTS } from "@/lib/game/constants";
 import { generatePin } from "@/lib/game/pin";
 
@@ -21,14 +20,20 @@ function HomePage() {
   const navigate = useNavigate();
   const [playerName, setPlayerName] = useState("");
 
+  // Load last used player name
+  useEffect(() => {
+    const lastName = localStorage.getItem("lastPlayerName");
+    if (lastName) setPlayerName(lastName);
+  }, []);
+
   const handleCreateGame = () => {
     if (!playerName.trim()) return;
 
     const pin = generatePin();
-    const playerId = uuidv4();
 
-    sessionStorage.setItem("playerName", playerName.trim());
-    sessionStorage.setItem("playerId", playerId);
+    // Save player name for future sessions
+    localStorage.setItem("lastPlayerName", playerName.trim());
+    // Signal to game page that we're creating (not joining)
     sessionStorage.setItem("isHost", "true");
 
     navigate({ to: "/game/$pin", params: { pin } });
@@ -37,7 +42,7 @@ function HomePage() {
   const handleJoinGame = () => {
     if (!playerName.trim()) return;
 
-    sessionStorage.setItem("playerName", playerName.trim());
+    localStorage.setItem("lastPlayerName", playerName.trim());
     navigate({ to: "/join" });
   };
 

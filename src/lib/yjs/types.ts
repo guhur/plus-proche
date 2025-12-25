@@ -1,11 +1,12 @@
 export type Difficulty = 1 | 2 | 3 | 4 | 5;
 
-export type GamePhase =
-  | "waiting"
-  | "settings"
-  | "question"
-  | "results"
-  | "finished";
+export enum GamePhase {
+  Waiting = "waiting",
+  Settings = "settings",
+  Question = "question",
+  Results = "results",
+  Finished = "finished",
+}
 
 export interface Player {
   id: string;

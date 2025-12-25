@@ -1,16 +1,16 @@
 import type { Difficulty } from "@/lib/yjs/types";
 
-interface GenerateQuestionParams {
+type GenerateQuestionParams = {
   theme: string;
   difficulty: Difficulty;
   previousQuestions?: string[];
-}
+};
 
-interface GeneratedQuestion {
+type GeneratedQuestion = {
   question: string;
   answer: number;
   explanation?: string;
-}
+};
 
 export async function generateQuestion(
   params: GenerateQuestionParams,
