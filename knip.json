@@ -1,0 +1,7 @@
+{
+  "$schema": "https://unpkg.com/knip@latest/schema.json",
+  "entry": ["src/main.tsx", "api/*.ts", "party/*.ts"],
+  "project": ["src/**/*.{ts,tsx}", "api/**/*.ts", "party/**/*.ts"],
+  "ignore": ["src/routeTree.gen.ts"],
+  "ignoreExportsUsedInFile": true
+}
