@@ -30,6 +30,10 @@ import {
   setPhase,
   setQuestion,
 } from "@/lib/game/actions";
+import {
+  addQuestionToCache,
+  getRecentQuestions,
+} from "@/lib/game/questionCache";
 import { calculateRoundResults } from "@/lib/game/scoring";
 import type { Difficulty, Question } from "@/lib/yjs/types";
 import { GamePhase } from "@/lib/yjs/types";
@@ -150,7 +154,15 @@ function GamePage() {
 
       setIsLoading(true);
       try {
-        const generated = await generateQuestion({ theme, difficulty });
+        const previousQuestions = getRecentQuestions(theme);
+        const generated = await generateQuestion({
+          theme,
+          difficulty,
+          previousQuestions,
+        });
+
+        // Cache the new question
+        addQuestionToCache(theme, generated.question);
 
         const question: Question = {
           id: uuidv4(),
